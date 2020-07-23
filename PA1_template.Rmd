@@ -1,25 +1,153 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Course 5 Project 1"
+author: "Aharon"
+date: "7/23/2020"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## Loading and preprocessing the data
+## Course 5 Project 1
 
+We'll begin by pulling in the necessary libraries
 
+```{r}
+library(tidyverse)
+library(lubridate)
+```
 
-## What is mean total number of steps taken per day?
+### Step 1
+First, we pull in the data (and do a little date transformation for good measure)
 
+```{r}
+data <- read.csv("Course5Project1/activity.csv")
 
+data$date <- ymd(data$date)
+```
 
-## What is the average daily activity pattern?
+### Step 2
 
+Here, the goal is to summarize by total steps per day. We can use DPLYR's group_by function to group by date, allowing us to take a sum for each day
 
+```{r}
+data2 <- data %>%
+      group_by(date) %>%
+      summarize(steps = sum(steps, na.rm = TRUE))
+```
 
-## Imputing missing values
+Next we visualize
 
+```{r, echo=TRUE}
+ggplot(data2, aes(x = data2$steps)) +
+      geom_histogram(bins = 25) +
+      labs(x = "steps", y = "Count", title = "Steps per Day")
+```
 
+### Step 3
+And now it's time to summarize by the mean and median steps per day. Once again, group_by and summarize are our friends.
 
-## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+data3 <- data %>%
+      group_by(date) %>%
+      summarize(mean_steps =mean(steps, na.rm = TRUE) ,
+                median_steps = median(steps, na.rm = TRUE))
+```
+
+And what answer do we get?
+
+```{r}
+print(data3)
+```
+
+### Step 4
+Now we've gotta do a time series plot, so, once again, we use group_by to do the heavy lifting.
+
+```{r}
+data4 <- data %>%
+      group_by(interval) %>%
+      summarize(mean_steps =mean(steps, na.rm = TRUE) ,
+                median_steps = median(steps, na.rm = TRUE))
+```
+And then we visualize
+
+```{r, echo = TRUE}
+ggplot(data4, aes(x = interval, y = mean_steps)) +
+      geom_line() +
+      labs(x = "Time Interval", y = "Mean Steps", title = "Mean Steps per Day")
+```
+
+### Step 5
+Now we have more of a quantitative question. Which time interval contains the max number of steps, on average? Yet again, group_by comes to the rescue 
+```{r}
+data5 <- data %>%
+      group_by(interval) %>%
+      summarize(mean = mean(steps, na.rm = TRUE))
+```
+And what are our results?
+```{r}
+print(data5 %>%
+      filter(mean == max(data4$mean)))
+```
+
+### Step 6
+Ooh imputation. Intimidating. But, with some quick tricks and a forloop, it shouldn't be too much trouble. Our strategy is to take average for each interval and impute that into the period in question
+
+```{r}
+colSums(is.na(data))
+
+data.imputed <- data
+
+for (i in 1:length(data.imputed$steps)) {
+      if (is.na(data.imputed$steps[i]) == TRUE) {
+            data.imputed$steps[i] <- mean(
+                  (data.imputed %>%
+                         filter(interval == data.imputed[i,3]) %>%
+                         select(steps))$steps,
+                  na.rm = TRUE
+            )
+      }
+}
+
+```
+
+Nice! 
+
+### Step 7
+
+And next, of course, we visualize
+
+```{r, echo=TRUE}
+data2.imputed <- data.imputed %>%
+      group_by(date) %>%
+      summarize(steps = sum(steps, na.rm = TRUE))
+
+ggplot(data2.imputed, aes(x = data2.imputed$steps)) +
+      geom_histogram(bins = 25) +
+      labs(x = "steps", y = "Count", title = "Steps per Day")
+```
+
+### Step 8
+Now, a simple panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends. This is going to take a little extra wrangling, but not a huge deal.
+
+```{r}
+data_final <- data.imputed %>%
+      mutate(weekday = weekdays(data.imputed$date)) %>%
+      mutate(weekend = ifelse(weekdays(data.imputed$date) %in% c("Sunday", "Saturday"), "Weekend", "Weekday")) %>%
+      group_by(interval, weekend) %>%
+      summarize(mean(steps))
+
+names(data_final)[3] <- "steps"
+```
+
+But now we visualize
+
+```{r, echo = TRUE}
+ggplot(data_final, aes(x=interval, y=steps)) +
+      geom_point() +
+      facet_grid(cols = vars(weekend)) +
+      labs(y ="Average Steps", x= "5 Minute Interval", title = "Steps per 5 Minute Interval, Weekday vs Weekend")
+```
+
+And voila, we're done!
